@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
+import os
+from pathlib import Path
 from zeroconf import ServiceBrowser, Zeroconf
 import socket
 import time
 import argparse
 from device import Device
+from scp import SCPClient
+import paramiko
 
 class BioreactorListener:
     """Listener for Bioreactor mDNS services."""
@@ -77,6 +81,37 @@ def get_devices(timeout=2):
     finally:
         zeroconf.close()
 
+def copy_recipe(recipe_path, username, password, timeout=2):
+    """
+    Copy recipe file to all detected devices using paramiko SCP
+    Args:
+        recipe_path (str): Path to recipe file
+        username (str): SSH username
+        password (str): SSH password
+        timeout (int): Discovery timeout in seconds
+    """
+    if not os.path.exists(recipe_path):
+        print(f"Error: Recipe file {recipe_path} not found")
+        return
+
+    devices = get_devices(timeout)
+    recipe_path = os.path.abspath(recipe_path)
+    remote_path = "/home/reactor/recipe-runner/config/default.yaml"
+
+    for device in devices:
+        print(f"Copying recipe to {device}...")
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(device.ip_address, username=username, password=password)
+            with SCPClient(ssh.get_transport()) as scp:
+                scp.put(recipe_path, remote_path)
+            print(f"Success: Recipe copied to {device}")
+        except Exception as e:
+            print(f"Error copying to {device}: {e}")
+        finally:
+            ssh.close()
+
 def execute_command(command, username, password, timeout=2):
     """
     Execute command on all detected devices
@@ -96,13 +131,15 @@ def execute_command(command, username, password, timeout=2):
             print(f"Success on {device}: {output}")
 
 def main():
-    """Main entry point for the fleet management tool."""
     parser = argparse.ArgumentParser(description='Bioreactor Fleet Management')
-    parser.add_argument('command', choices=['discover', 'update_firmware', 'update_services', 'execute', 'recipe_start', 'recipe_stop'], help='Command to execute')
+    parser.add_argument('command', choices=['discover', 'update_firmware', 'update_services',
+                                          'execute', 'recipe_start', 'recipe_restart', 'recipe_stop', 'recipe_load'],
+                       help='Command to execute')
     parser.add_argument('--timeout', type=int, default=2, help='Discovery timeout in seconds')
     parser.add_argument('--username', help='SSH username', default="reactor")
     parser.add_argument('--password', help='SSH password', default="grow")
     parser.add_argument('--cmd', help='Command to execute on devices')
+    parser.add_argument('--recipe', help='Path to recipe file')
 
     args = parser.parse_args()
 
@@ -114,8 +151,15 @@ def main():
         execute_command("./update_firmware.sh", args.username, args.password, args.timeout)
     elif args.command == 'recipe_start':
         execute_command("sudo systemctl start recipe-runner.service", args.username, args.password, args.timeout)
+    elif args.command == 'recipe_restart':
+        execute_command("sudo systemctl restart recipe-runner.service", args.username, args.password, args.timeout)
     elif args.command == 'recipe_stop':
         execute_command("sudo systemctl stop recipe-runner.service", args.username, args.password, args.timeout)
+    elif args.command == 'recipe_load':
+        if not args.recipe:
+            print("Error: --recipe argument is required for recipe_load command")
+            return
+        copy_recipe(args.recipe, args.username, args.password, args.timeout)
     elif args.command == 'execute':
         if not args.cmd:
             print("Error: --cmd argument is required for execute command")
