@@ -46,7 +46,7 @@ def discover_devices(timeout=2):
         if devices:
             print(f"Discovered {len(devices)} device/s:")
             print("----------------------")
-            for device in sorted(devices):
+            for device in devices:
                 print(device)
         else:
             print("No devices found")
@@ -77,7 +77,7 @@ def get_devices(timeout=2):
     try:
         browser = ServiceBrowser(zeroconf, "_bioreactor_api._tcp.local.", listener)
         time.sleep(timeout)
-        return sorted(listener.devices)
+        return listener.devices
     finally:
         zeroconf.close()
 
