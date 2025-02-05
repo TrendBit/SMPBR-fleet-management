@@ -9,6 +9,10 @@ class Device:
     def __str__(self):
         return f"{self.hostname} {self.ip_address}"
 
+    def __lt__(self, other):
+        """Enable sorting by hostname"""
+        return self.hostname < other.hostname
+
     def execute_command(self, command, username, password):
         """
         Execute command on device using SSH.

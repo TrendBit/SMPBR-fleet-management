@@ -9,6 +9,7 @@ import argparse
 from device import Device
 from scp import SCPClient
 import paramiko
+from colorama import init, Fore
 
 class BioreactorListener:
     """Listener for Bioreactor mDNS services."""
@@ -53,17 +54,6 @@ def discover_devices(timeout=2):
     except Exception as e:
         print(f"Error during device discovery: {e}")
 
-def start_devices(username, password, timeout=2):
-    """Execute update.sh on all detected devices"""
-    try:
-        devices = get_devices(timeout)
-        for device in devices:
-            print(f"Executing update.sh on {device}...")
-            success, message = device.execute_command("./update.sh", username, password)
-            print(message)
-    except Exception as e:
-        print(f"Error during device update: {e}")
-
 def get_devices(timeout=2):
     """
     Get list of available bioreactor devices.
@@ -77,7 +67,7 @@ def get_devices(timeout=2):
     try:
         browser = ServiceBrowser(zeroconf, "_bioreactor_api._tcp.local.", listener)
         time.sleep(timeout)
-        return listener.devices
+        return sorted(listener.devices)
     finally:
         zeroconf.close()
 
@@ -106,9 +96,9 @@ def copy_recipe(recipe_path, username, password, timeout=2):
             ssh.connect(device.ip_address, username=username, password=password)
             with SCPClient(ssh.get_transport()) as scp:
                 scp.put(recipe_path, remote_path)
-            print(f"Success: Recipe copied to {device}")
+            print(f"{Fore.GREEN}Success: Recipe copied to {device}{Fore.RESET}")
         except Exception as e:
-            print(f"Error copying to {device}: {e}")
+            print(f"{Fore.RED}Error copying to {device}: {e}{Fore.RESET}")
         finally:
             ssh.close()
 
@@ -126,9 +116,9 @@ def execute_command(command, username, password, timeout=2):
         print(f"Executing '{command}' on {device}...")
         output, error = device.execute_command(command, username, password, )
         if error:
-            print(f"Error on {device}: {error}")
+            print(f"{Fore.RED}Error on {device}: {error}{Fore.RESET}")
         else:
-            print(f"Success on {device}: {output}")
+            print(f"{Fore.GREEN}Success on {device}: {output}{Fore.RESET}")
 
 def main():
     parser = argparse.ArgumentParser(description='Bioreactor Fleet Management')
