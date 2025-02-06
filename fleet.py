@@ -1,160 +1,69 @@
 #!/usr/bin/env python3
+import click
 
-import os
-from pathlib import Path
-from zeroconf import ServiceBrowser, Zeroconf
-import socket
-import time
-import argparse
-from device import Device
-from scp import SCPClient
-import paramiko
-from colorama import init, Fore
+from commands import *
 
-class BioreactorListener:
-    """Listener for Bioreactor mDNS services."""
-    def __init__(self):
-        self.devices = []
+# Common options
+def common_options(f):
+    f = click.option('--timeout', default=2, help='Discovery timeout in seconds')(f)
+    f = click.option('--username', default='reactor', help='SSH username')(f)
+    f = click.option('--password', default='grow', help='SSH password')(f)
+    return f
 
-    def remove_service(self, zeroconf, type, name):
-        """Called when a service is removed."""
-        pass
+@click.group()
+def cli():
+    """Bioreactor Fleet Management Tool"""
+    pass
 
-    def add_service(self, zeroconf, type, name):
-        """Called when a service is discovered."""
-        try:
-            info = zeroconf.get_service_info(type, name)
-            if info and info.addresses:
-                ip = socket.inet_ntoa(info.addresses[0])
-                hostname = info.server.rstrip('.local.')
-                device = Device(hostname, ip, info.port)
-                self.devices.append(device)
-        except Exception as e:
-            print(f"Error adding service {name}: {e}")
+@cli.command()
+@click.option('--timeout', default=2, help='Discovery timeout in seconds')
+def discover(timeout):
+    """Discover available bioreactor devices"""
+    discover_devices(timeout)
 
-    def update_service(self, zeroconf, type, name):
-        """Called when a service is updated."""
-        pass
+@cli.command()
+@common_options
+def update_services(timeout, username, password):
+    """Update services on all devices"""
+    execute_command("./update_services.sh", username, password, timeout)
 
-def discover_devices(timeout=2):
-    """
-    Discover and print available bioreactor devices.
-    Args:
-        timeout (int): Time to wait for device discovery in seconds
-    """
-    try:
-        devices = get_devices(timeout)
-        if devices:
-            print(f"Discovered {len(devices)} device/s:")
-            print("----------------------")
-            for device in devices:
-                print(device)
-        else:
-            print("No devices found")
-    except Exception as e:
-        print(f"Error during device discovery: {e}")
+@cli.command()
+@common_options
+def update_firmware(timeout, username, password):
+    """Update firmware on all devices"""
+    execute_command("./update_firmware.sh", username, password, timeout)
 
-def get_devices(timeout=2):
-    """
-    Get list of available bioreactor devices.
-    Args:
-        timeout (int): Time to wait for device discovery in seconds
-    Returns:
-        list: List of Device objects
-    """
-    zeroconf = Zeroconf()
-    listener = BioreactorListener()
-    try:
-        browser = ServiceBrowser(zeroconf, "_bioreactor_api._tcp.local.", listener)
-        time.sleep(timeout)
-        return sorted(listener.devices)
-    finally:
-        zeroconf.close()
+@cli.command()
+@common_options
+def recipe_start(timeout, username, password):
+    """Start recipe runner service"""
+    execute_command("sudo systemctl start recipe-runner.service", username, password, timeout)
 
-def copy_recipe(recipe_path, username, password, timeout=2):
-    """
-    Copy recipe file to all detected devices using paramiko SCP
-    Args:
-        recipe_path (str): Path to recipe file
-        username (str): SSH username
-        password (str): SSH password
-        timeout (int): Discovery timeout in seconds
-    """
-    if not os.path.exists(recipe_path):
-        print(f"Error: Recipe file {recipe_path} not found")
-        return
+@cli.command()
+@common_options
+def recipe_restart(timeout, username, password):
+    """Restart recipe runner service"""
+    execute_command("sudo systemctl restart recipe-runner.service", username, password, timeout)
 
-    devices = get_devices(timeout)
-    recipe_path = os.path.abspath(recipe_path)
-    remote_path = "/home/reactor/recipe-runner/config/default.yaml"
+@cli.command()
+@common_options
+def recipe_stop(timeout, username, password):
+    """Stop recipe runner service"""
+    execute_command("sudo systemctl stop recipe-runner.service", username, password, timeout)
 
-    for device in devices:
-        print(f"Copying recipe to {device}...")
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            ssh.connect(device.ip_address, username=username, password=password)
-            with SCPClient(ssh.get_transport()) as scp:
-                scp.put(recipe_path, remote_path)
-            print(f"{Fore.GREEN}Success: Recipe copied to {device}{Fore.RESET}")
-        except Exception as e:
-            print(f"{Fore.RED}Error copying to {device}: {e}{Fore.RESET}")
-        finally:
-            ssh.close()
+@cli.command()
+@common_options
+@click.option('--recipe', required=True, type=click.Path(exists=True), help='Path to recipe file')
+def recipe_load(recipe, timeout, username, password):
+    """Load recipe to all devices"""
+    copy_recipe(recipe, username, password, timeout)
 
-def execute_command(command, username, password, timeout=2):
-    """
-    Execute command on all detected devices
-    Args:
-        command (str): Command to execute
-        username (str): SSH username
-        password (str): SSH password
-        timeout (int): Discovery timeout in seconds
-    """
-    devices = get_devices(timeout)
-    for device in devices:
-        print(f"Executing '{command}' on {device}...")
-        output, error = device.execute_command(command, username, password, )
-        if error:
-            print(f"{Fore.RED}Error on {device}: {error}{Fore.RESET}")
-        else:
-            print(f"{Fore.GREEN}Success on {device}: {output}{Fore.RESET}")
-
-def main():
-    parser = argparse.ArgumentParser(description='Bioreactor Fleet Management')
-    parser.add_argument('command', choices=['discover', 'update_firmware', 'update_services',
-                                          'execute', 'recipe_start', 'recipe_restart', 'recipe_stop', 'recipe_load'],
-                       help='Command to execute')
-    parser.add_argument('--timeout', type=int, default=2, help='Discovery timeout in seconds')
-    parser.add_argument('--username', help='SSH username', default="reactor")
-    parser.add_argument('--password', help='SSH password', default="grow")
-    parser.add_argument('--cmd', help='Command to execute on devices')
-    parser.add_argument('--recipe', help='Path to recipe file')
-
-    args = parser.parse_args()
-
-    if args.command == 'discover':
-        discover_devices(args.timeout)
-    elif args.command == 'update_services':
-        execute_command("./update_services.sh", args.username, args.password, args.timeout)
-    elif args.command == 'update_firmware':
-        execute_command("./update_firmware.sh", args.username, args.password, args.timeout)
-    elif args.command == 'recipe_start':
-        execute_command("sudo systemctl start recipe-runner.service", args.username, args.password, args.timeout)
-    elif args.command == 'recipe_restart':
-        execute_command("sudo systemctl restart recipe-runner.service", args.username, args.password, args.timeout)
-    elif args.command == 'recipe_stop':
-        execute_command("sudo systemctl stop recipe-runner.service", args.username, args.password, args.timeout)
-    elif args.command == 'recipe_load':
-        if not args.recipe:
-            print("Error: --recipe argument is required for recipe_load command")
-            return
-        copy_recipe(args.recipe, args.username, args.password, args.timeout)
-    elif args.command == 'execute':
-        if not args.cmd:
-            print("Error: --cmd argument is required for execute command")
-            return
-        execute_command(args.cmd, args.username, args.password, args.timeout)
+@cli.command()
+@common_options
+@click.option('--cmd', required=True, help='Command to execute on devices')
+def execute(cmd, timeout, username, password):
+    """Execute custom command on all devices"""
+    execute_command(cmd, username, password, timeout)
 
 if __name__ == "__main__":
-    main()
+    cli()

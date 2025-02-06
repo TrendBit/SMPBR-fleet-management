@@ -33,3 +33,26 @@ class Device:
             return output, error
         finally:
             client.close()
+
+    def upload_file(self, local_path: str, remote_path: str, username: str, password: str) -> tuple[bool, str]:
+        """
+        Upload file to device using SCP
+        Args:
+            local_path (str): Path to local file
+            remote_path (str): Remote destination path
+            username (str): SSH username
+            password (str): SSH password
+        Returns:
+            tuple: (success, message)
+        """
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(self.ip_address, username=username, password=password)
+            with SCPClient(ssh.get_transport()) as scp:
+                scp.put(local_path, remote_path)
+            return True, f"File uploaded successfully to {self}"
+        except Exception as e:
+            return False, str(e)
+        finally:
+            ssh.close()
