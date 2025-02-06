@@ -58,6 +58,15 @@ def recipe_load(recipe, timeout, username, password):
     """Load recipe to all devices"""
     copy_recipe(recipe, username, password, timeout)
 
+
+@cli.command()
+@common_options
+@click.option('--local', required=True, type=click.Path(exists=True), help='Path to local file')
+@click.option('--remote', required=True, help='Remote destination path')
+def upload_file(local, remote, timeout, username, password):
+    """Upload file to all devices"""
+    upload_file_to_devices(local, remote, username, password, timeout)
+
 @cli.command()
 @common_options
 @click.option('--cmd', required=True, help='Command to execute on devices')

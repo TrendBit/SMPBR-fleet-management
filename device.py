@@ -1,4 +1,5 @@
 import paramiko
+from scp import SCPClient
 
 class Device:
     def __init__(self, hostname, ip_address, port):
