@@ -6,20 +6,34 @@ from listener import BioreactorListener
 from zeroconf import ServiceBrowser, Zeroconf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def get_devices(timeout=2):
-    """
-    Get list of available bioreactor devices.
-    Args:
-        timeout (int): Time to wait for device discovery in seconds
-    Returns:
-        list: List of Device objects
-    """
+def parse_range(range_str: str) -> list[int]:
+    """Parse range string like '1-3,5,7-9' into list of numbers"""
+    if not range_str:
+        return []
+
+    numbers = set()
+    for part in range_str.split(','):
+        if '-' in part:
+            start, end = map(int, part.split('-'))
+            numbers.update(range(start, end + 1))
+        else:
+            numbers.add(int(part))
+    return sorted(list(numbers))
+
+def get_devices(timeout=2, device_range=None):
+    """Get list of discovered devices filtered by range"""
     zeroconf = Zeroconf()
     listener = BioreactorListener()
     try:
         browser = ServiceBrowser(zeroconf, "_bioreactor_api._tcp.local.", listener)
         time.sleep(timeout)
-        return sorted(listener.devices)
+        devices = sorted(listener.devices)
+
+        if device_range:
+            numbers = parse_range(device_range)
+            devices = [d for d in devices if d.number() in numbers]
+
+        return devices
     finally:
         zeroconf.close()
 
@@ -48,13 +62,13 @@ def execute_parallel(func, items, *args):
         for future in as_completed(futures):
             future.result()
 
-def upload_file_to_devices(local_path, remote_path, username, password, timeout=2, parallel=False):
+def upload_file_to_devices(local_path, remote_path, username, password, timeout=2, parallel=False, device_range=None):
     """Upload file to all detected devices"""
     if not os.path.exists(local_path):
         print(f"{Fore.RED}Error: File {local_path} not found{Fore.RESET}")
         return
 
-    devices = get_devices(timeout)
+    devices = get_devices(timeout, device_range)
     local_path = os.path.abspath(local_path)
 
     def upload_to_device(device):
@@ -71,17 +85,17 @@ def upload_file_to_devices(local_path, remote_path, username, password, timeout=
         for device in devices:
             upload_to_device(device)
 
-def execute_command(command, username, password, timeout=2, parallel=False):
+def execute_command(command, username, password, timeout=2, parallel=False, device_range=None):
     """Execute command on all detected devices"""
-    devices = get_devices(timeout)
+    devices = get_devices(timeout, device_range)
 
     def run_on_device(device):
         print(f"Executing on {device}...")
-        success, message = device.execute_command(command, username, password)
-        if success:
-            print(f"{Fore.GREEN}Success on {device}: {message}{Fore.RESET}")
+        success, error = device.execute_command(command, username, password)
+        if not error:
+            print(f"{Fore.GREEN}Success on {device}: {Fore.RESET}{success}")
         else:
-            print(f"{Fore.RED}Error on {device}: {message}{Fore.RESET}")
+            print(f"{Fore.RED}Error on {device}: {Fore.RESET}{error}")
 
     if parallel:
         execute_parallel(run_on_device, devices)
@@ -89,7 +103,7 @@ def execute_command(command, username, password, timeout=2, parallel=False):
         for device in devices:
             run_on_device(device)
 
-def update_firmware(username, password, timeout=2, firmware_path = None):
+def update_device_firmware(username, password, timeout=2, firmware_path = None, parallel=False, device_range=None):
     """
     Update firmware on all detected devices
     Args:
@@ -99,14 +113,14 @@ def update_firmware(username, password, timeout=2, firmware_path = None):
         timeout (int): Discovery timeout in seconds
     """
     if firmware_path:
-        upload_file_to_devices(firmware_path, "~", username, password, timeout)
+        upload_file_to_devices(firmware_path, "/home/reactor/", username, password, timeout, parallel, device_range)
         archive_name = os.path.basename(firmware_path)
-        execute_command("./update_firmware.sh --local {}".format(archive_name), username, password, timeout)
+        execute_command("./update_firmware.sh -l {}".format(archive_name), username, password, timeout, parallel, device_range)
     else:
-        execute_command("./update_firmware.sh --fetch", username, password, timeout)
+        execute_command("./update_firmware.sh -f", username, password, timeout, parallel, device_range)
 
 
-def copy_recipe(recipe_path, username, password, timeout=2, parallel=False):
+def copy_recipe(recipe_path, username, password, timeout=2, parallel=False, device_range=None):
     """
     Copy recipe file to all detected devices using SCP
     Args:
@@ -116,7 +130,7 @@ def copy_recipe(recipe_path, username, password, timeout=2, parallel=False):
         timeout (int): Discovery timeout in seconds
     """
     remote_path = "/home/reactor/recipe-runner/config/default.yaml"
-    upload_file_to_devices(recipe_path, remote_path, username, password, timeout, parallel)
+    upload_file_to_devices(recipe_path, remote_path, username, password, timeout, parallel,device_range)
 
 
 

@@ -14,6 +14,12 @@ class Device:
         """Enable sorting by hostname"""
         return self.hostname < other.hostname
 
+    def number(self) -> int:
+        """Extract number from device hostname"""
+        import re
+        match = re.search(r'\d+', self.hostname)
+        return int(match.group()) if match else 0
+
     def execute_command(self, command, username, password):
         """
         Execute command on device using SSH.
