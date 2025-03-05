@@ -89,13 +89,21 @@ def execute_command(command, username, password, timeout=2, parallel=False, devi
     """Execute command on all detected devices"""
     devices = get_devices(timeout, device_range)
 
+    def format_output(device, status, message, color):
+        """Format command output with consistent styling"""
+        message = message.strip()
+        if message.count('\n') > 1:
+            return f"{color}{status} on {device}:{Fore.RESET}\n{message}"
+        return f"{color}{status} on {device}: {Fore.RESET}{message}"
+
     def run_on_device(device):
         print(f"Executing on {device}...")
         success, error = device.execute_command(command, username, password)
+
         if not error:
-            print(f"{Fore.GREEN}Success on {device}: {Fore.RESET}{success}")
+            print(format_output(device, "Success", success, Fore.GREEN))
         else:
-            print(f"{Fore.RED}Error on {device}: {Fore.RESET}{error}")
+            print(format_output(device, "Error", error, Fore.RED))
 
     if parallel:
         execute_parallel(run_on_device, devices)
@@ -118,19 +126,3 @@ def update_device_firmware(username, password, timeout=2, firmware_path = None, 
         execute_command("./update_firmware.sh -l {}".format(archive_name), username, password, timeout, parallel, device_range)
     else:
         execute_command("./update_firmware.sh -f", username, password, timeout, parallel, device_range)
-
-
-def copy_recipe(recipe_path, username, password, timeout=2, parallel=False, device_range=None):
-    """
-    Copy recipe file to all detected devices using SCP
-    Args:
-        recipe_path (str): Path to recipe file
-        username (str): SSH username
-        password (str): SSH password
-        timeout (int): Discovery timeout in seconds
-    """
-    remote_path = "/home/reactor/recipe-runner/config/default.yaml"
-    upload_file_to_devices(recipe_path, remote_path, username, password, timeout, parallel,device_range)
-
-
-
