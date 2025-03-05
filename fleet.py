@@ -2,12 +2,14 @@
 import click
 
 from commands import *
+import subprocess
+import os
 
 # Common options
 def common_options(f):
     f = click.option('--timeout', default=3, help='Discovery timeout in seconds')(f)
-    f = click.option('--username', default='reactor', help='SSH username')(f)
-    f = click.option('--password', default='grow', help='SSH password')(f)
+    f = click.option('--username', default='root', help='SSH username')(f)
+    f = click.option('--password', default='reactor', help='SSH password')(f)
     f = click.option('--parallel/--sequential', default=False, help='Execute in parallel')(f)
     f = click.option('--range', help='Device range (e.g. 1-3,5,7-9)')(f)
     return f
@@ -38,28 +40,29 @@ def update_firmware(timeout, username, password, local, parallel, range):
 
 @cli.command()
 @common_options
-def recipe_start(timeout, username, password, parallel, range):
+@click.option('--recipe', required=True, help='Name of recipe')
+def recipe_start(timeout, username, password, parallel, range, recipe):
     """Start recipe runner service"""
-    execute_command("sudo systemctl start recipe-runner.service", username, password, timeout, parallel, range)
-
-@cli.command()
-@common_options
-def recipe_restart(timeout, username, password, parallel, range):
-    """Restart recipe runner service"""
-    execute_command("sudo systemctl restart recipe-runner.service", username, password, timeout, parallel, range)
+    execute_command(f"reactor-script-api -s recipes/{recipe}", username, password, timeout, parallel, range)
 
 @cli.command()
 @common_options
 def recipe_stop(timeout, username, password, parallel, range):
     """Stop recipe runner service"""
-    execute_command("sudo systemctl stop recipe-runner.service", username, password, timeout, parallel, range)
+    execute_command("reactor-script-api -x", username, password, timeout, parallel, range)
+
+@cli.command()
+@common_options
+def recipe_list(timeout, username, password, parallel, range):
+    """Start recipe runner service"""
+    execute_command("ls /home/reactor/recipes/", username, password, timeout, parallel, range)
 
 @cli.command()
 @common_options
 @click.option('--recipe', required=True, type=click.Path(exists=True), help='Path to recipe file')
 def recipe_load(recipe, timeout, username, password, parallel, range):
     """Load recipe to all devices"""
-    copy_recipe(recipe, username, password, timeout, parallel, range)
+    upload_file_to_devices(recipe_path, "/home/reactor/recipes/", username, password, timeout, parallel, range)
 
 @cli.command()
 @common_options
