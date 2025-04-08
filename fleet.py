@@ -135,5 +135,11 @@ def execute(cmd, timeout, username, password, parallel, range):
     """Execute custom command on all devices"""
     execute_command(cmd, username, password, timeout, parallel, range)
 
+@cli.command()
+@common_options
+def calibrate(timeout, username, password, parallel, range):
+    """Execute custom command on all devices"""
+    execute_command("cansend can0 04900061#", username, password, timeout, parallel, range)
+
 if __name__ == "__main__":
     cli()
