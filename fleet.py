@@ -85,7 +85,7 @@ def update_services(timeout, username, password, repo, parallel, range):
 def update_system(timeout, username, password, swu, parallel, range):
     """Update firmware on all devices"""
     upload_file_to_devices(swu, "/home/reactor/", username, password, timeout, parallel, range)
-    execute_command(f"rpi_ab_update install {swu}; reboot \"0 tryboot\"", username, password, timeout, parallel, range)
+    execute_command(f"rpi_ab_update install {swu}", username, password, timeout, parallel, range)
 
 @cli.command()
 @common_options
