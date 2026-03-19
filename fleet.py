@@ -118,7 +118,7 @@ def recipe_list(timeout, username, password, parallel, range):
 @click.option('--recipe', required=True, type=click.Path(exists=True), help='Path to recipe file')
 def recipe_load(recipe, timeout, username, password, parallel, range):
     """Load recipe to all devices"""
-    upload_file_to_devices(recipe_path, "/home/reactor/recipes/", username, password, timeout, parallel, range)
+    upload_file_to_devices(recipe, "/home/reactor/recipes/", username, password, timeout, parallel, range)
 
 @cli.command()
 @common_options
